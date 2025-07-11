@@ -2,14 +2,17 @@ import os
 
 from discord import Member, MemberProfile, Message, Client
 
-TOKEN: str = os.getenv("DISCORD_TOKEN")
-GUILDS: list[int] = [int(guild_id) for guild_id in os.getenv("GUILDS", default="").split(",")]
-client = Client(guild_subscriptions=False)
+TOKEN = os.getenv("DISCORD_TOKEN")
+GUILDS_RAW = os.getenv("GUILDS")
 
 if not TOKEN:
-    raise "Missing DISCORD_TOKEN environment variable)"
-if not GUILDS:
-    raise "Missing or invalid GUILDS environment variable"
+    raise Exception("Missing DISCORD_TOKEN environment variable)")
+if not GUILDS_RAW:
+    raise Exception("Missing GUILDS environment variable")
+
+GUILDS: list[int] = [int(guild_id) for guild_id in GUILDS_RAW.split(",")]
+
+client = Client(guild_subscriptions=False)
 
 
 @client.event
@@ -43,4 +46,5 @@ async def on_message(_self, message: Message):
         await message.reply('pong', mention_author=False)
 
 
-client.run(TOKEN)
+if __name__ == '__main__':
+    client.run(TOKEN)
