@@ -1,0 +1,11 @@
+[project]
+name = "no-guns-lol"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "discord-py-self",
+]
+
+[tool.uv.sources]
+discord-py-self = { git = "https://github.com/dolfies/discord.py-self.git", rev = "f0e81c5" }
