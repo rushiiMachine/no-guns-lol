@@ -1,50 +1,111 @@
+import logging
 import os
+from datetime import timedelta
+from time import sleep
 
-from discord import Member, MemberProfile, Message, Client
+from discord import Member, Message, Client, Guild, HTTPException, NotFound, InvalidData
 
-TOKEN = os.getenv("DISCORD_TOKEN")
-GUILDS_RAW = os.getenv("GUILDS")
-
-if not TOKEN:
-    raise Exception("Missing DISCORD_TOKEN environment variable)")
-if not GUILDS_RAW:
-    raise Exception("Missing GUILDS environment variable")
-
-GUILDS: list[int] = [int(guild_id) for guild_id in GUILDS_RAW.split(",")]
-
-client = Client(guild_subscriptions=False)
+_log = logging.getLogger("no-guns-lol")
 
 
-@client.event
-async def on_ready(self: Client):
-    print(f'Logged in as {self.user.name}#{self.user.discriminator} ({self.user.id})')
-    for guild_id in GUILDS:
-        guild = await self.fetch_guild(guild_id)
-        await guild.subscribe(typing=True, member_updates=True, activities=False, threads=False)
+async def handle_member(member: Member) -> bool:
+    if member.bot: return False
+
+    profile = None
+    try:
+        _log.debug(f"Fetching profile for {member.name} ({member.id})")
+        profile = await member.profile(
+            with_mutual_guilds=False,
+            with_mutual_friends=False,
+            with_mutual_friends_count=False)
+    except HTTPException as e:
+        _log.error(f"Failed to fetch profile for {member.id}", e)
+    except (NotFound, InvalidData):
+        pass
+
+    if ((profile.bio and "https://guns.lol/" in profile.bio) or
+            (profile.guild_bio and "https://guns.lol/" in profile.guild_bio)):
+        try:
+            _log.info(f"Banning {profile.name} ({profile.id})")
+            await profile.ban(reason="guns.lol in bio")
+            return True
+        except Exception as e:
+            _log.warning(f"Failed to ban {profile.name} ({profile.id})", e)
+
+    return False
 
 
-@client.event
-async def on_member_join(_self, member: Member):
-    print(f'New member joined: {member.name} ({member.id})')
-    await handle_user(member=await member.profile())
+class NoGunsLolClient(Client):
+    def __init__(self, target_guilds: list[int]):
+        super(NoGunsLolClient, self).__init__(guild_subscriptions=False, max_messages=None)
+        self._all_target_guilds: set[int] = set(target_guilds)
+        self._available_target_guilds: set[int] = set()
+
+    # Events
+
+    async def on_ready(self):
+        _log.info(f'Logged in as {self.user.name}#{self.user.discriminator} ({self.user.id})')
+
+        guilds = [g for g in (self.get_guild(gid) for gid in self._all_target_guilds) if
+                  g and g.me.guild_permissions.ban_members]
+        self._available_target_guilds = set([g.id for g in guilds])
+
+        for guild in guilds:
+            _log.debug(f"Subscribing to guild {guild.name} ({guild.id})")
+            await guild.subscribe(typing=True, activities=False, threads=False, member_updates=True)
+
+    async def on_guild_remove(self, guild: Guild):
+        self._available_target_guilds -= guild.id
+
+    async def on_guild_join(self, guild: Guild):
+        if guild.id in self._all_target_guilds:
+            self._available_target_guilds += guild.id
+            _log.debug(f"Subscribing to guild {guild.name} ({guild.id})")
+            await guild.subscribe(typing=True, activities=False, threads=False, member_updates=True)
+
+    async def on_member_join(self, member: Member):
+        profile = await member.profile()
+        await handle_member(profile)
+
+    async def on_message(self, message: Message):
+        if message.author.id != self.user.id: return
+
+        if message.content == ".scan" and message.guild:
+            _log.info(f"Scanning guild {message.guild.name} ({message.guild.id})")
+            members = await message.guild.fetch_members(cache=False)
+
+            time_estimate = timedelta(seconds=int(len(members) * 1.01))
+            await message.reply(f"Scanning {len(members)} members, estimated time: {time_estimate}")
+
+            members_banned = 0
+            for member in members:
+                sleep(1.01)
+                members_banned += await handle_member(member)
+
+            await message.reply(f"Finished scanning, banned {members_banned} members!", mention_author=True)
 
 
-@client.event
-async def on_member_update(_self, _before: Member, after: Member):
-    await handle_user(member=await after.profile())
+def main():
+    token = os.getenv("DISCORD_TOKEN")
+    guilds_raw = os.getenv("GUILDS")
+    debug = len(os.getenv("DEBUG", "")) > 0
 
+    guilds = []
 
-async def handle_user(member: MemberProfile):
-    if "https://guns.lol/" in member.guild_bio or "https://guns.lol/" in member.bio:
-        print(f"Banning {member.name} ({member.id})")
-        await member.ban(reason="guns.lol in bio")
+    if not token:
+        raise Exception("Missing DISCORD_TOKEN environment variable)")
 
+    if not guilds_raw:
+        _log.warning("The GUILDS environment variable is missing, not subscribing to any guilds...")
+        _log.warning("This means that no new users from any guild will be scanned")
+    else:
+        guilds = [int(uid) for uid in guilds_raw.split(",")]
 
-@client.event
-async def on_message(_self, message: Message):
-    if message.content == '$$$ping':
-        await message.reply('pong', mention_author=False)
+    NoGunsLolClient(target_guilds=guilds).run(
+        token,
+        root_logger=True,
+        log_level=logging.DEBUG if debug else logging.INFO)
 
 
 if __name__ == '__main__':
-    client.run(TOKEN)
+    main()
