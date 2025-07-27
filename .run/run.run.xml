@@ -1,0 +1,21 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="run" type="UvRunConfigurationType" factoryName="UvRunConfigurationType">
+    <option name="args">
+      <list />
+    </option>
+    <option name="checkSync" value="true" />
+    <option name="env">
+      <map />
+    </option>
+    <option name="runType" value="SCRIPT" />
+    <option name="scriptOrModule" value="C:\Projects\_personal\no-guns-lol\main.py" />
+    <option name="uvArgs">
+      <list>
+        <option value="--env-file" />
+        <option value=".env" />
+      </list>
+    </option>
+    <option name="uvSdkKey" value="uv (no-guns-lol)" />
+    <method v="2" />
+  </configuration>
+</component>

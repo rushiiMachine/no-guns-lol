@@ -1,6 +1,7 @@
 import logging
 import os
 from datetime import timedelta
+from random import randint
 from time import sleep
 
 from discord import Member, Message, Client, Guild, HTTPException, NotFound, InvalidData
@@ -65,13 +66,12 @@ class NoGunsLolClient(Client):
             await guild.subscribe(typing=True, activities=False, threads=False, member_updates=True)
 
     async def on_member_join(self, member: Member):
-        if member.id not in self._whitelist_users:
-            profile = await member.profile()
-            await handle_member(profile)
+        if member.guild.id in self._available_target_guilds and member.id not in self._whitelist_users:
+            sleep(randint(1, 5))  # Random jitter
+            await handle_member(member)
 
     async def on_message(self, message: Message):
         if message.author.id != self.user.id: return
-
         if message.content == ".scan" and message.guild:
             _log.info(f"Scanning guild {message.guild.name} ({message.guild.id})")
             members = await message.guild.fetch_members(cache=False)
