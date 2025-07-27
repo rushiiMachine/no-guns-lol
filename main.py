@@ -1,18 +1,21 @@
 import logging
+import math
 import os
 from datetime import timedelta
 from random import randint
 from time import sleep
 
+from cachetools import TTLCache
 from discord import Member, Message, Client, Guild, HTTPException, NotFound, InvalidData
 
 _log = logging.getLogger("no-guns-lol")
+_checkedUsers = TTLCache(maxsize=math.inf, ttl=timedelta(days=1).total_seconds())
 
 
 async def handle_member(member: Member) -> bool:
     if member.bot: return False
+    if member.id in _checkedUsers: return False
 
-    profile = None
     try:
         _log.debug(f"Fetching profile for {member.name} ({member.id})")
         profile = await member.profile(
@@ -21,8 +24,10 @@ async def handle_member(member: Member) -> bool:
             with_mutual_friends_count=False)
     except HTTPException as e:
         _log.error(f"Failed to fetch profile for {member.id}", e)
+        return False
     except (NotFound, InvalidData):
-        pass
+        _checkedUsers[member.id] = True
+        return False
 
     if ((profile.bio and "https://guns.lol/" in profile.bio) or
             (profile.guild_bio and "https://guns.lol/" in profile.guild_bio)):
@@ -32,6 +37,8 @@ async def handle_member(member: Member) -> bool:
             return True
         except Exception as e:
             _log.warning(f"Failed to ban {profile.name} ({profile.id})", e)
+    else:
+        _checkedUsers[member.id] = True
 
     return False
 
@@ -71,6 +78,9 @@ class NoGunsLolClient(Client):
             await handle_member(member)
 
     async def on_message(self, message: Message):
+        if message.guild and message.guild.id in self._available_target_guilds and message.author.id != self.user.id:
+            await handle_member(message.author)
+
         if message.author.id != self.user.id: return
         if message.content == ".scan" and message.guild:
             _log.info(f"Scanning guild {message.guild.name} ({message.guild.id})")
@@ -99,6 +109,7 @@ def main():
     if not token:
         raise Exception("Missing DISCORD_TOKEN environment variable)")
 
+    # FIXME: no logs until client initializes logger
     if not guilds_raw:
         _log.warning("The GUILDS environment variable is missing, not subscribing to any guilds...")
         _log.warning("This means that no new users from any guild will be scanned")

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = [
+    "cachetools>=6.1.0",
     "discord-py-self",
 ]
 
