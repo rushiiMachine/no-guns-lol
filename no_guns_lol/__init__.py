@@ -1,6 +1,7 @@
 import logging
 import math
 import threading
+import time
 from datetime import timedelta
 from random import randint
 from time import sleep
@@ -60,6 +61,41 @@ class NoGunsLolClient(Client):
         self._available_target_guilds: set[int] = set()
         self._whitelist_users: set[int] = set(whitelist_users)
 
+    async def handle_scan(self, message: Message):
+        _log.info(f"Scanning guild {message.guild.name} ({message.guild.id}), "
+                  f"requested by {message.author}({message.author.id})")
+
+        members = await message.guild.fetch_members(cache=False)
+        member_count = len(members)
+
+        time_start = time.time()
+        time_estimate = timedelta(seconds=int(member_count * 1.01))
+        status_message = await message.reply(
+            f"Scanning {member_count} members, estimated time: {chop_timedelta(time_estimate)}")
+
+        members_processed = 0
+        members_banned = 0
+
+        async def update_status_message():
+            time_elapsed = chop_timedelta(timedelta(seconds=time.time() - time_start))
+            processed_percent = members_processed / member_count * 100
+            await status_message.edit(content=
+                                      f"Scanning {member_count} members, estimated time: {time_estimate}\n\n"
+                                      f"*Elapsed time: {time_elapsed}*, processed members: {members_processed} "
+                                      f"({processed_percent:.1f}%)")
+
+        for member in [m for m in members if m.id not in self._whitelist_users]:
+            sleep(1.01)
+            members_banned += await handle_member(member)
+            members_processed += 1
+
+            # Update status message around 1/min
+            if members_processed % 60 == 1:
+                await update_status_message()
+
+        await update_status_message()
+        await message.reply(f"Finished scanning, banned {members_banned} members!", mention_author=True)
+
     # Events
 
     async def on_ready(self):
@@ -93,21 +129,14 @@ class NoGunsLolClient(Client):
 
         if message.author.id != self.user.id: return
         if message.content == ".scan" and message.guild:
-            _log.info(f"Scanning guild {message.guild.name} ({message.guild.id})")
-            members = await message.guild.fetch_members(cache=False)
+            await self.handle_scan(message)
 
-            time_estimate = timedelta(seconds=int(len(members) * 1.01))
-            await message.reply(f"Scanning {len(members)} members, estimated time: {time_estimate}")
 
-            members_banned = 0
-            for member in [m for m in members if m.id not in self._whitelist_users]:
-                sleep(1.01)
-                members_banned += await handle_member(member)
-
-            await message.reply(f"Finished scanning, banned {members_banned} members!", mention_author=True)
+def chop_timedelta(delta: timedelta) -> timedelta:
+    return timedelta(seconds=math.ceil(delta.total_seconds()))
 
 
 __all__ = (
-    start_cache_auto_expire,
     NoGunsLolClient,
+    start_cache_auto_expire,
 )
