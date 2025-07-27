@@ -5,6 +5,7 @@ import time
 from datetime import timedelta
 from random import randint
 from time import sleep
+from typing import Optional
 
 from cachetools import TTLCache
 from discord import Member, Message, Client, Guild, HTTPException, NotFound, InvalidData
@@ -55,11 +56,16 @@ async def handle_member(member: Member) -> bool:
 
 
 class NoGunsLolClient(Client):
-    def __init__(self, target_guilds: list[int], whitelist_users: list[int]):
+    def __init__(self,
+                 target_guilds: list[int],
+                 whitelist_users: Optional[list[int]] = None,
+                 owner_uid: Optional[int] = None,
+                 ):
         super(NoGunsLolClient, self).__init__(guild_subscriptions=False, max_messages=None)
         self._all_target_guilds: set[int] = set(target_guilds)
         self._available_target_guilds: set[int] = set()
-        self._whitelist_users: set[int] = set(whitelist_users)
+        self._whitelist_users: set[int] = set(whitelist_users or [])
+        self._owner_uid: Optional[int] = owner_uid
 
     async def handle_scan(self, message: Message):
         _log.info(f"Scanning guild {message.guild.name} ({message.guild.id}), "
@@ -124,12 +130,12 @@ class NoGunsLolClient(Client):
             await handle_member(member)
 
     async def on_message(self, message: Message):
-        if message.guild and message.guild.id in self._available_target_guilds and message.author.id != self.user.id:
+        if message.author.id in [self.user.id, self._owner_uid]:
+            if message.content == ".scan":
+                await self.handle_scan(message)
+            return
+        elif message.guild and message.guild.id in self._available_target_guilds:
             await handle_member(message.author)
-
-        if message.author.id != self.user.id: return
-        if message.content == ".scan" and message.guild:
-            await self.handle_scan(message)
 
 
 def chop_timedelta(delta: timedelta) -> timedelta:
