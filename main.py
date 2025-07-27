@@ -1,6 +1,7 @@
 import logging
 import math
 import os
+import threading
 from datetime import timedelta
 from random import randint
 from time import sleep
@@ -10,6 +11,16 @@ from discord import Member, Message, Client, Guild, HTTPException, NotFound, Inv
 
 _log = logging.getLogger("no-guns-lol")
 _checkedUsers = TTLCache(maxsize=math.inf, ttl=timedelta(days=1).total_seconds())
+
+
+def start_cache_auto_expire():
+    def loop():
+        while True:
+            sleep(timedelta(days=1).total_seconds())
+            _log.debug("Clearing expired checked users cache entries")
+            _checkedUsers.expire()  # Remove expired entries
+
+    threading.Thread(target=loop, daemon=True).start()
 
 
 async def handle_member(member: Member) -> bool:
@@ -124,6 +135,7 @@ def main():
         target_guilds=guilds,
         whitelist_users=whitelist_users)
 
+    start_cache_auto_expire()
     client.run(
         token,
         root_logger=True,
