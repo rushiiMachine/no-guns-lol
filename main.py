@@ -1,7 +1,7 @@
 import logging
 import os
 
-from discord.utils import setup_logging
+import coloredlogs
 
 from no_guns_lol import NoGunsLolClient, start_cache_auto_expire
 
@@ -16,11 +16,16 @@ def main():
     guilds = []
     whitelist_users = []
 
-    _log = logging.getLogger(__name__)
-    setup_logging(
+    coloredlogs.install(
+        isatty=True,
         level=logging.DEBUG if debug else logging.INFO,
-        root=True,
+        logger=logging.root,
+        fmt="[{asctime}] [{levelname:<7}] {name}: {message}",
+        style="{",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
+
+    _log = logging.getLogger(__name__)
 
     if not token:
         raise Exception("Missing TOKEN environment variable!")
