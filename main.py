@@ -7,8 +7,8 @@ from no_guns_lol import NoGunsLolClient, start_cache_auto_expire
 
 
 def main():
-    token = os.getenv("DISCORD_TOKEN")
-    guilds_raw = os.getenv("GUILDS")
+    token = os.getenv("TOKEN")
+    guilds_raw = os.getenv("SCAN_GUILDS")
     users_whitelist = os.getenv("WHITELIST_USERS")
     owner = os.getenv("OWNER")
     debug = len(os.getenv("DEBUG", "")) > 0
@@ -23,10 +23,10 @@ def main():
     )
 
     if not token:
-        raise Exception("Missing DISCORD_TOKEN environment variable!")
+        raise Exception("Missing TOKEN environment variable!")
 
     if not guilds_raw:
-        _log.warning("The GUILDS environment variable is missing; not subscribing to any guilds! "
+        _log.warning("The SCAN_GUILDS environment variable is missing; not subscribing to any guilds! "
                      "This means that no users from any guild will be scanned!")
     else:
         guilds = [int(gid) for gid in guilds_raw.split(",")]

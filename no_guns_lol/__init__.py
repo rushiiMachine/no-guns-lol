@@ -62,12 +62,15 @@ class NoGunsLolClient(Client):
                  owner_uid: Optional[int] = None,
                  ):
         super(NoGunsLolClient, self).__init__(guild_subscriptions=False, max_messages=None)
-        self._all_target_guilds: set[int] = set(target_guilds)
-        self._available_target_guilds: set[int] = set()
+        self._target_guilds: set[int] = set(target_guilds)
         self._whitelist_users: set[int] = set(whitelist_users or [])
         self._owner_uid: Optional[int] = owner_uid
 
     async def handle_scan(self, message: Message):
+        if not message.guild.me.guild_permissions.ban_members:
+            await message.reply("This account does not have permissions to ban members of this server!")
+            return
+
         _log.info(f"Scanning guild {message.guild.name} ({message.guild.id}), "
                   f"requested by {message.author}({message.author.id})")
 
@@ -102,39 +105,52 @@ class NoGunsLolClient(Client):
         await update_status_message()
         await message.reply(f"Finished scanning, banned {members_banned} members!", mention_author=True)
 
+    async def handle_server_join(self, guild: Guild):
+        if guild.id in self._target_guilds:
+            _log.debug(f"Subscribing to guild {guild.name} ({guild.id})")
+            await guild.subscribe(typing=True, activities=False, threads=False, member_updates=True)
+
     # Events
 
     async def on_ready(self):
         _log.info(f'Logged in as {self.user.name}#{self.user.discriminator} ({self.user.id})')
 
-        guilds = [g for g in (self.get_guild(gid) for gid in self._all_target_guilds) if
-                  g and g.me.guild_permissions.ban_members]
-        self._available_target_guilds = set([g.id for g in guilds])
+        for guild_id in self._target_guilds:
+            guild = self.get_guild(guild_id)
+            if not guild:
+                _log.warning(
+                    f"Target guild {guild_id} was not found! No scans can be performed for this server until this account has joined it!")
+                continue
 
-        for guild in guilds:
+            if not guild.me.guild_permissions.ban_members:
+                _log.warning(
+                    f"This account does not have permissions to ban members in the target guild {guild.name} ({guild.id})! "
+                    f"No scans will be performed in this server until this account has been given permissions the necessary permissions!")
+
             _log.debug(f"Subscribing to guild {guild.name} ({guild.id})")
             await guild.subscribe(typing=True, activities=False, threads=False, member_updates=True)
-
-    async def on_guild_remove(self, guild: Guild):
-        self._available_target_guilds -= guild.id
 
     async def on_guild_join(self, guild: Guild):
-        if guild.id in self._all_target_guilds:
-            self._available_target_guilds += guild.id
-            _log.debug(f"Subscribing to guild {guild.name} ({guild.id})")
-            await guild.subscribe(typing=True, activities=False, threads=False, member_updates=True)
+        await self.handle_server_join(guild)
+
+    async def on_guild_available(self, guild: Guild):
+        await self.handle_server_join(guild)
 
     async def on_member_join(self, member: Member):
-        if member.guild.id in self._available_target_guilds and member.id not in self._whitelist_users:
+        if (member.guild.id in self._target_guilds and
+                member.guild.me.guild_permissions.ban_members and
+                member.id not in self._whitelist_users):
             sleep(randint(1, 5))  # Random jitter
             await handle_member(member)
 
     async def on_message(self, message: Message):
         if message.author.id in [self.user.id, self._owner_uid]:
-            if message.content == ".scan":
+            if message.guild and message.content == ".scan":
                 await self.handle_scan(message)
             return
-        elif message.guild and message.guild.id in self._available_target_guilds:
+        elif (message.guild and
+              message.guild.me.guild_permissions.ban_members and
+              message.guild.id in self._target_guilds):
             await handle_member(message.author)
 
 
