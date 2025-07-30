@@ -20,7 +20,7 @@ docker run \
   -e OWNER=0123 \
   -e SCAN_GUILDS=0123,4567 \
   -e USERS_WHITELIST=0123,4567 \
-  ghcr.io/rushiiMachine/no-guns-lol
+  ghcr.io/rushiimachine/no-guns-lol:latest
 ```
 
 Environment variables:
