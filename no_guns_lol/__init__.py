@@ -41,8 +41,9 @@ async def handle_member(member: Member) -> bool:
         _checkedUsers[member.id] = True
         return False
 
-    if ((profile.bio and "https://guns.lol/" or "https://guns.bio/" in profile.bio) or
-            (profile.guild_bio and "https://guns.lol/" or "https://guns.bio/" in profile.guild_bio)):
+    domains = ["https://guns.lol/", "https://guns.bio/"]
+    if ((profile.bio and any(domain in profile.bio for domain in domains)) or
+            (profile.guild_bio and any(domain in profile.guild_bio for domain in domains))):
         try:
             _log.info(f"Banning {profile.name} ({profile.id})")
             await profile.ban(reason="guns.lol in bio")
